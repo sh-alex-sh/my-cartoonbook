@@ -51,7 +51,7 @@ public class SignUtil {
     public static String makeSign() {
 
         // API访问密钥
-        String secretKey = "KppKsn7ezZxhi6lIDjbo7YyVYzanSu2d";
+        String secretKey = "";
         
         // 请求API接口的uri地址
         String uri = "/api/generate/webui/text2img";
