@@ -1,4 +1,5 @@
-__pycache__/
+uploads/
 outputs/
+__pycache__/
 *.pyc
 .env
