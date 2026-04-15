@@ -7,6 +7,7 @@ from docx import Document
 import pytesseract
 from PIL import Image
 import io
+from pdf2image import convert_from_path
 
 
 class DocumentParser:
@@ -32,27 +33,23 @@ class DocumentParser:
                 page_text = page.extract_text()
                 if page_text:
                     text += page_text + "\n"
-                page_image = self._extract_pdf_page_image(page)
-                if page_image:
-                    ocr_text = self._ocr_image(page_image)
-                    if ocr_text:
-                        text += f"\n[图片OCR识别]\n{ocr_text}\n"
+        try:
+            pages = convert_from_path(filepath, dpi=200, poppler_path=r'C:\poppler\Library\bin')
+            for i, page_image in enumerate(pages):
+                ocr_text = self._ocr_image(page_image)
+                if ocr_text:
+                    text += f"\n[第{i+1}页图片OCR识别]\n{ocr_text}\n"
+        except Exception as e:
+            print(f"PDF页面渲染OCR失败: {e}")
         return text
 
-    def _extract_pdf_page_image(self, page):
+    def _ocr_image(self, image_source):
         try:
-            if '/XObject' in page['/Resources']:
-                xobjects = page['/XObject'].get_object()
-                for obj in xobjects.values():
-                    if obj.get('/Subtype') == '/Image':
-                        return None
-        except Exception:
-            pass
-        return None
-
-    def _ocr_image(self, image_data):
-        try:
-            image = Image.open(io.BytesIO(image_data))
+            pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+            if isinstance(image_source, bytes):
+                image = Image.open(io.BytesIO(image_source))
+            else:
+                image = image_source
             text = pytesseract.image_to_string(image, lang='chi_sim+eng')
             return text.strip()
         except Exception as e:

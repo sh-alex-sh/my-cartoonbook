@@ -2,61 +2,233 @@
 <html lang="zh">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 绘本生成器</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; }
-        .step { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
-        h2 { color: #333; }
-        textarea { width: 100%; height: 200px; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; resize: none; }
-        select, input[type="file"] { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #45a049; }
-        button:disabled { background: #ccc; }
-        button.secondary { background: #2196F3; }
-        button.secondary:hover { background: #1976D2; }
-        pre { background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; }
-        .result { margin-top: 10px; }
-        .error { color: red; }
-        .images-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; margin-top: 15px; }
-        .image-card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; text-align: center; }
-        .image-card img { max-width: 100%; border-radius: 4px; }
-        .image-card .page-num { font-weight: bold; margin-top: 5px; }
-        .file-info { padding: 10px; background: #e8f5e9; border-radius: 4px; margin: 10px 0; }
-        .file-row { display: flex; gap: 10px; align-items: center; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: white;
+            font-size: 2.5em;
+            margin-bottom: 30px;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        .step {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #1a1a2e;
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h2::before {
+            content: '';
+            width: 4px;
+            height: 24px;
+            background: linear-gradient(180deg, #667eea, #764ba2);
+            border-radius: 2px;
+        }
+        textarea {
+            width: 100%;
+            height: 180px;
+            padding: 16px;
+            border: 2px solid #e8e8e8;
+            border-radius: 12px;
+            font-size: 15px;
+            line-height: 1.6;
+            resize: none;
+            transition: border-color 0.3s;
+        }
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .file-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        input[type="file"] {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            font-size: 14px;
+        }
+        .controls {
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+        label {
+            color: #666;
+            font-size: 14px;
+        }
+        select {
+            padding: 10px 16px;
+            border: 2px solid #e8e8e8;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+        }
+        button {
+            padding: 12px 28px;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button.primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+        button.primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+        button.secondary {
+            background: #f5f5f5;
+            color: #333;
+        }
+        button.secondary:hover {
+            background: #eee;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+        .file-info {
+            padding: 16px;
+            background: linear-gradient(135deg, #e8f4f8 0%, #f0f7ff 100%);
+            border-radius: 10px;
+            margin-bottom: 16px;
+            color: #2c5282;
+            font-size: 14px;
+        }
+        .images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+        .image-card {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        .image-card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+        }
+        .image-card .page-num {
+            padding: 12px;
+            text-align: center;
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        pre {
+            background: #f5f5f5;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .error { color: #e53e3e; }
+        .success { color: #38a169; }
+        h3 {
+            color: #1a1a2e;
+            margin: 20px 0 10px 0;
+            font-size: 1.1em;
+        }
+        .page-item {
+            padding: 16px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 12px;
+        }
+        .page-item strong {
+            color: #667eea;
+        }
+        a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
     </style>
 </head>
 <body>
-    <h1>🎨 AI 绘本生成器</h1>
+    <div class="container">
+        <h1>🎨 AI 绘本生成器</h1>
 
-    <div class="step">
-        <h2>第一步：输入或上传故事内容</h2>
-        <div class="file-row">
-            <input type="file" id="fileInput" accept=".pdf,.docx,.txt" />
-            <button class="secondary" onclick="uploadFile()">📤 上传并解析</button>
+        <div class="step">
+            <h2>输入或上传故事内容</h2>
+            <div class="file-row">
+                <input type="file" id="fileInput" accept=".pdf,.docx,.txt" />
+                <button class="secondary" onclick="uploadFile()">📤 上传并解析</button>
+            </div>
+            <div id="fileInfo" class="file-info" style="display:none;"></div>
+            <textarea id="storyContent" placeholder="输入故事内容，或上传文件自动解析..."></textarea>
+            <div class="controls">
+                <label>生成页数：</label>
+                <select id="numPages">
+                    <option value="5">5页</option>
+                    <option value="8" selected>8页</option>
+                    <option value="10">10页</option>
+                    <option value="12">12页</option>
+                </select>
+                <button class="primary" onclick="generateOutline()">✨ 生成绘本大纲</button>
+            </div>
+            <div id="outlineResult" class="result"></div>
         </div>
-        <div id="fileInfo" class="file-info" style="display:none;"></div>
-        <textarea id="storyContent" rows="8" placeholder="输入故事内容，或上传文件自动解析..."></textarea>
-        <label>生成页数：</label>
-        <select id="numPages">
-            <option value="5">5页</option>
-            <option value="8" selected>8页</option>
-            <option value="10">10页</option>
-            <option value="12">12页</option>
-        </select>
-        <button onclick="generateOutline()">✨ 生成绘本大纲</button>
-        <div id="outlineResult" class="result"></div>
-    </div>
 
-    <div class="step">
-        <h2>第二步：生成图片</h2>
-        <button id="generateImagesBtn" onclick="generateImages()" disabled>🎨 生成所有图片</button>
-        <div id="imagesResult" class="result"></div>
-    </div>
+        <div class="step">
+            <h2>生成图片</h2>
+            <button class="primary" id="generateImagesBtn" onclick="generateImages()" disabled>🎨 生成所有图片</button>
+            <div id="imagesResult" class="result"></div>
+        </div>
 
-    <div class="step">
-        <h2>第三步：导出 PDF</h2>
-        <button id="exportPdfBtn" onclick="exportPdf()" disabled>📚 导出绘本 PDF</button>
-        <div id="exportResult" class="result"></div>
+        <div class="step">
+            <h2>导出 PDF</h2>
+            <button class="primary" id="exportPdfBtn" onclick="exportPdf()" disabled>📚 导出绘本 PDF</button>
+            <div id="exportResult" class="result"></div>
+        </div>
     </div>
 
     <script>
@@ -102,10 +274,21 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ filepath: currentFilepath })
                 });
-                const parseData = await parseResponse.json();
+                const parseText = await parseResponse.text();
+                let parseData;
+                try {
+                    parseData = JSON.parse(parseText);
+                } catch (e) {
+                    fileInfo.innerHTML = `<span class="error">解析响应失败:<br>${parseText}</span>`;
+                    return;
+                }
 
                 if (parseData.error) {
-                    fileInfo.innerHTML = `<span class="error">解析失败: ${parseData.error}</span>`;
+                    let errMsg = `解析失败: ${parseData.error}`;
+                    if (parseData.details) {
+                        errMsg += `<br><pre>${parseData.details}</pre>`;
+                    }
+                    fileInfo.innerHTML = `<span class="error">${errMsg}</span>`;
                     return;
                 }
 
@@ -127,7 +310,7 @@
                 return;
             }
 
-            resultDiv.innerHTML = '正在生成大纲（可能需要几秒钟）...';
+            resultDiv.innerHTML = '<span class="error">正在生成大纲（可能需要几秒钟）...</span>';
 
             try {
                 const response = await fetch('/api/outline', {
@@ -153,7 +336,7 @@
 
                     <h3>📄 内容页 (${currentOutline.pages.length}页)</h3>
                     ${currentOutline.pages.map(p => `
-                        <div style="margin: 10px 0; padding: 10px; background: #f9f9f9;">
+                        <div class="page-item">
                             <strong>第${p.page_num}页</strong><br>
                             叙事目标: ${p.narrative_goal}<br>
                             内容: ${p.content}<br>
@@ -178,7 +361,7 @@
             const btn = document.getElementById('generateImagesBtn');
             btn.disabled = true;
             btn.textContent = '生成中...';
-            resultDiv.innerHTML = '正在生成图片（这可能需要几分钟）...';
+            resultDiv.innerHTML = '<span class="error">正在生成图片（这可能需要几分钟）...</span>';
 
             try {
                 const response = await fetch('/api/images', {
@@ -204,13 +387,13 @@
 
                 const successCount = currentImages.filter(img => img.image_url && !img.image_url.startsWith('http')).length;
                 resultDiv.innerHTML = `
-                    <p>✅ 图片生成完成！成功 ${successCount}/${currentImages.length} 张</p>
+                    <p class="success">✅ 图片生成完成！成功 ${successCount}/${currentImages.length} 张</p>
                     <div class="images-grid">
                         ${currentImages.map((img, i) => `
                             <div class="image-card">
                                 ${img.error
                                     ? `<p class="error">❌ ${img.error}</p>`
-                                    : `<img src="${img.image_url}" alt="第${i+1}页" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2214%22>加载失败</text></svg>'" />`
+                                    : `<img src="${img.image_url}" alt="第${i+1}页" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22><rect fill=%22%23f5f5f5%22 width=%22200%22 height=%22200%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22%23999%22>加载失败</text></svg>'" />`
                                 }
                                 <div class="page-num">第${i+1}页</div>
                             </div>
@@ -233,7 +416,7 @@
             const btn = document.getElementById('exportPdfBtn');
             btn.disabled = true;
             btn.textContent = '导出中...';
-            resultDiv.innerHTML = '正在导出 PDF...';
+            resultDiv.innerHTML = '<span class="error">正在导出 PDF...</span>';
 
             try {
                 const response = await fetch('/api/export', {
@@ -255,7 +438,7 @@
                 }
 
                 resultDiv.innerHTML = `
-                    <p>✅ PDF 导出完成！</p>
+                    <p class="success">✅ PDF 导出完成！</p>
                     <p><a href="${data.download_url}" target="_blank">📥 点击下载绘本 PDF</a></p>
                 `;
             } catch (err) {
