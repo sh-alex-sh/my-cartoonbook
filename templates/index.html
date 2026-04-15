@@ -7,10 +7,12 @@
         body { font-family: Arial, sans-serif; max-width: 900px; margin: 50px auto; padding: 20px; }
         .step { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
         h2 { color: #333; }
-        textarea, select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; }
+        textarea, select, input[type="file"] { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
         button { background: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
         button:hover { background: #45a049; }
         button:disabled { background: #ccc; }
+        button.secondary { background: #2196F3; }
+        button.secondary:hover { background: #1976D2; }
         pre { background: #f5f5f5; padding: 15px; border-radius: 4px; overflow-x: auto; }
         .result { margin-top: 10px; }
         .error { color: red; }
@@ -18,14 +20,21 @@
         .image-card { border: 1px solid #ddd; border-radius: 8px; padding: 10px; text-align: center; }
         .image-card img { max-width: 100%; border-radius: 4px; }
         .image-card .page-num { font-weight: bold; margin-top: 5px; }
+        .file-info { padding: 10px; background: #e8f5e9; border-radius: 4px; margin: 10px 0; }
+        .file-row { display: flex; gap: 10px; align-items: center; }
     </style>
 </head>
 <body>
     <h1>🎨 AI 绘本生成器</h1>
 
     <div class="step">
-        <h2>第一步：输入故事内容</h2>
-        <textarea id="storyContent" rows="6" placeholder="输入一个故事内容...">小兔子米米住在森林边的小屋里。有一天，她决定去森林深处探险。在路上，她遇到了一只迷路的小鸟，两人成为了朋友。后来，他们又遇到了一只害羞的小鹿，一起找到了回家的路。最后，三个新朋友约好明天再来森林里玩。</textarea>
+        <h2>第一步：输入或上传故事内容</h2>
+        <div class="file-row">
+            <input type="file" id="fileInput" accept=".pdf,.docx,.txt" />
+            <button class="secondary" onclick="uploadFile()">📤 上传并解析</button>
+        </div>
+        <div id="fileInfo" class="file-info" style="display:none;"></div>
+        <textarea id="storyContent" rows="8" placeholder="输入故事内容，或上传文件自动解析..."></textarea>
         <label>生成页数：</label>
         <select id="numPages">
             <option value="5">5页</option>
@@ -53,13 +62,71 @@
         let currentOutline = null;
         let currentImages = null;
         let currentTaskId = null;
+        let currentFilepath = null;
+
+        async function uploadFile() {
+            const fileInput = document.getElementById('fileInput');
+            const fileInfo = document.getElementById('fileInfo');
+            const storyContent = document.getElementById('storyContent');
+
+            if (!fileInput.files || fileInput.files.length === 0) {
+                alert('请选择文件');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const formData = new FormData();
+            formData.append('file', file);
+
+            fileInfo.style.display = 'block';
+            fileInfo.innerHTML = '上传中...';
+
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                if (data.error) {
+                    fileInfo.innerHTML = `<span class="error">上传失败: ${data.error}</span>`;
+                    return;
+                }
+
+                currentFilepath = data.filepath;
+                fileInfo.innerHTML = `文件已上传: ${file.name}<br>正在解析内容...`;
+
+                const parseResponse = await fetch('/api/parse', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filepath: currentFilepath })
+                });
+                const parseData = await parseResponse.json();
+
+                if (parseData.error) {
+                    fileInfo.innerHTML = `<span class="error">解析失败: ${parseData.error}</span>`;
+                    return;
+                }
+
+                storyContent.value = parseData.content;
+                fileInfo.innerHTML = `✅ 文件解析完成: ${file.name}<br>字数: ${parseData.content.length} 字`;
+
+            } catch (err) {
+                fileInfo.innerHTML = `<span class="error">错误: ${err.message}</span>`;
+            }
+        }
 
         async function generateOutline() {
             const content = document.getElementById('storyContent').value;
             const numPages = document.getElementById('numPages').value;
             const resultDiv = document.getElementById('outlineResult');
 
-            resultDiv.innerHTML = '正在生成大纲...';
+            if (!content.trim()) {
+                alert('请输入故事内容或上传文件');
+                return;
+            }
+
+            resultDiv.innerHTML = '正在生成大纲（可能需要几秒钟）...';
 
             try {
                 const response = await fetch('/api/outline', {

@@ -10,11 +10,11 @@ api = Blueprint('api', __name__)
 
 
 def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() == 'pdf'
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ['pdf', 'docx', 'txt']
 
 
 @api.route('/upload', methods=['POST'])
-def upload_pdf():
+def upload_file():
     if 'file' not in request.files:
         return jsonify({'error': '没有文件'}), 400
     file = request.files['file']
@@ -29,14 +29,17 @@ def upload_pdf():
 
 
 @api.route('/parse', methods=['POST'])
-def parse_pdf():
-    from services.pdf_parser import PDFParser
+def parse_document():
+    from services.pdf_parser import DocumentParser
     data = request.json
     filepath = data.get('filepath')
     if not filepath or not os.path.exists(filepath):
         return jsonify({'error': '文件不存在'}), 400
-    content = PDFParser().extract_text(filepath)
-    return jsonify({'content': content})
+    try:
+        content = DocumentParser().extract_text(filepath)
+        return jsonify({'content': content})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @api.route('/outline', methods=['POST'])
