@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI 绘本生成器</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
@@ -351,6 +352,7 @@
                 `;
 
                 document.getElementById('generateImagesBtn').disabled = false;
+                document.getElementById('exportPdfBtn').disabled = true;
             } catch (err) {
                 resultDiv.innerHTML = `<p class="error">错误: ${err.message}</p>`;
             }
@@ -359,6 +361,13 @@
         async function generateImages() {
             const resultDiv = document.getElementById('imagesResult');
             const btn = document.getElementById('generateImagesBtn');
+
+            const fileInput = document.getElementById('fileInput');
+            let fileName = fileInput.files && fileInput.files[0] ? fileInput.files[0].name : '当前故事';
+            if (!confirm(`确认生成「${fileName}」的绘本图片吗？`)) {
+                return;
+            }
+
             btn.disabled = true;
             btn.textContent = '生成中...';
             resultDiv.innerHTML = '<span class="error">正在生成图片（这可能需要几分钟）...</span>';
@@ -386,6 +395,15 @@
                 }
 
                 const successCount = currentImages.filter(img => img.image_url && !img.image_url.startsWith('http')).length;
+
+                if (successCount === 0) {
+                    resultDiv.innerHTML = `<p class="error">❌ 图片生成失败，请重试</p>`;
+                    btn.disabled = false;
+                    btn.textContent = '🎨 生成所有图片';
+                    document.getElementById('exportPdfBtn').disabled = true;
+                    return;
+                }
+
                 resultDiv.innerHTML = `
                     <p class="success">✅ 图片生成完成！成功 ${successCount}/${currentImages.length} 张</p>
                     <div class="images-grid">
@@ -414,6 +432,12 @@
         async function exportPdf() {
             const resultDiv = document.getElementById('exportResult');
             const btn = document.getElementById('exportPdfBtn');
+
+            if (!currentImages || currentImages.length === 0) {
+                resultDiv.innerHTML = '<p class="error">请先生成图片后再导出 PDF</p>';
+                return;
+            }
+
             btn.disabled = true;
             btn.textContent = '导出中...';
             resultDiv.innerHTML = '<span class="error">正在导出 PDF...</span>';

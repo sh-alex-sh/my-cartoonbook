@@ -95,8 +95,7 @@ class OutlineGenerator:
         print(f"[DEBUG] API Base: {self.api_base}")
 
         if not self.api_key:
-            print("[DEBUG] No API key, using sample")
-            return self._generate_sample_outline(num_pages)
+            raise Exception("未配置 DeepSeek API 密钥，请检查 .env 文件中的 DEEPSEEK_API_KEY")
 
         headers = {
             "Content-Type": "application/json",
@@ -140,15 +139,19 @@ class OutlineGenerator:
                 outline = json.loads(text)
                 return outline
             else:
-                print(f"[DEBUG] DeepSeek API error: {result}")
-                return self._generate_sample_outline(num_pages)
+                error_msg = result.get("error", {}).get("message", str(result))
+                print(f"[DEBUG] DeepSeek API error: {error_msg}")
+                raise Exception(f"DeepSeek API 错误: {error_msg}")
 
         except requests.exceptions.Timeout:
             print("[DEBUG] Request timed out")
-            return self._generate_sample_outline(num_pages)
+            raise Exception("DeepSeek API 请求超时，请重试")
+        except json.JSONDecodeError as e:
+            print(f"[DEBUG] JSON decode error: {e}")
+            raise Exception(f"DeepSeek API 返回格式错误: {str(e)}")
         except Exception as e:
             print(f"[DEBUG] Error calling DeepSeek API: {e}")
-            return self._generate_sample_outline(num_pages)
+            raise Exception(f"调用 DeepSeek API 失败: {str(e)}")
 
     def _generate_sample_outline(self, num_pages):
         pages = []
