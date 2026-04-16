@@ -227,7 +227,7 @@
 
         <div class="step">
             <h2>导出 PDF</h2>
-            <button class="primary" id="exportPdfBtn" onclick="exportPdf()" disabled>📚 导出绘本 PDF</button>
+            <button class="primary" id="exportPdfBtn" onclick="exportPdf()">📚 导出绘本 PDF</button>
             <div id="exportResult" class="result"></div>
         </div>
     </div>
@@ -236,6 +236,7 @@
         let currentOutline = null;
         let currentImages = null;
         let currentTaskId = null;
+        let currentOriginalName = null;
         let currentFilepath = null;
 
         async function uploadFile() {
@@ -268,6 +269,8 @@
                 }
 
                 currentFilepath = data.filepath;
+                currentTaskId = data.task_id;
+                currentOriginalName = data.original_name || 'story';
                 fileInfo.innerHTML = `文件已上传: ${file.name}<br>正在解析内容...`;
 
                 const parseResponse = await fetch('/api/parse', {
@@ -327,7 +330,12 @@
                 }
 
                 currentOutline = data.outline;
-                currentTaskId = Date.now().toString();
+                if (!currentTaskId) {
+                    currentTaskId = Date.now().toString();
+                }
+                if (!currentOriginalName) {
+                    currentOriginalName = 'story';
+                }
 
                 resultDiv.innerHTML = `
                     <h3>📖 封面</h3>
@@ -352,7 +360,6 @@
                 `;
 
                 document.getElementById('generateImagesBtn').disabled = false;
-                document.getElementById('exportPdfBtn').disabled = true;
             } catch (err) {
                 resultDiv.innerHTML = `<p class="error">错误: ${err.message}</p>`;
             }
@@ -376,7 +383,7 @@
                 const response = await fetch('/api/images', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ outline: currentOutline })
+                    body: JSON.stringify({ outline: currentOutline, task_id: currentTaskId, original_name: currentOriginalName })
                 });
                 const data = await response.json();
 
@@ -394,38 +401,49 @@
                     return;
                 }
 
-                const successCount = currentImages.filter(img => img.image_url && !img.image_url.startsWith('http')).length;
+                let successCount = 0;
+                let validImages = [];
+                for (const img of currentImages) {
+                    if (img.image_url && !img.image_url.startsWith('http') && !img.error) {
+                        successCount++;
+                        validImages.push(img);
+                    }
+                }
 
                 if (successCount === 0) {
                     resultDiv.innerHTML = `<p class="error">❌ 图片生成失败，请重试</p>`;
                     btn.disabled = false;
                     btn.textContent = '🎨 生成所有图片';
-                    document.getElementById('exportPdfBtn').disabled = true;
                     return;
                 }
 
                 resultDiv.innerHTML = `
                     <p class="success">✅ 图片生成完成！成功 ${successCount}/${currentImages.length} 张</p>
                     <div class="images-grid">
-                        ${currentImages.map((img, i) => `
+                        ${currentImages.map((img, i) => {
+                            let label = img.type === 'cover' ? '封面' : (img.type === 'back_cover' ? '封底' : `第${i}页`);
+                            let pageLabel = label;
+                            if (img.type === 'cover') pageLabel = '📖 封面';
+                            else if (img.type === 'back_cover') pageLabel = '📋 封底';
+                            else pageLabel = `📄 第${i}页`;
+                            return `
                             <div class="image-card">
                                 ${img.error
                                     ? `<p class="error">❌ ${img.error}</p>`
-                                    : `<img src="${img.image_url}" alt="第${i+1}页" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22200%22 height=%22200%22><rect fill=%22%23f5f5f5%22 width=%22200%22 height=%22200%22/><text x=%2250%25%22 y=%2250%25%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 font-size=%2214%22 fill=%22%23999%22>加载失败</text></svg>'" />`
+                                    : `<img src="${img.image_url}" alt="${label}" onerror="console.error('图片加载失败:', this.src); this.onerror=null; this.style.opacity='0.3'" />`
                                 }
-                                <div class="page-num">第${i+1}页</div>
+                                <div class="page-num">${pageLabel}</div>
                             </div>
-                        `).join('')}
+                        `}).join('')}
                     </div>
                 `;
-
-                document.getElementById('exportPdfBtn').disabled = false;
             } catch (err) {
                 resultDiv.innerHTML = `<p class="error">错误: ${err.message}</p>`;
                 btn.disabled = false;
                 btn.textContent = '🎨 生成所有图片';
             }
 
+            btn.disabled = false;
             btn.textContent = '🎨 生成所有图片';
         }
 
@@ -435,6 +453,18 @@
 
             if (!currentImages || currentImages.length === 0) {
                 resultDiv.innerHTML = '<p class="error">请先生成图片后再导出 PDF</p>';
+                return;
+            }
+
+            let hasValidImage = false;
+            for (const img of currentImages) {
+                if (img.image_url && !img.image_url.startsWith('http') && !img.error) {
+                    hasValidImage = true;
+                    break;
+                }
+            }
+            if (!hasValidImage) {
+                resultDiv.innerHTML = '<p class="error">请先生成有效的图片后再导出 PDF</p>';
                 return;
             }
 
@@ -449,7 +479,8 @@
                     body: JSON.stringify({
                         outline: currentOutline,
                         images: currentImages,
-                        task_id: currentTaskId
+                        task_id: currentTaskId,
+                        original_name: currentOriginalName || 'story'
                     })
                 });
                 const data = await response.json();
@@ -465,6 +496,8 @@
                     <p class="success">✅ PDF 导出完成！</p>
                     <p><a href="${data.download_url}" target="_blank">📥 点击下载绘本 PDF</a></p>
                 `;
+                btn.disabled = false;
+                btn.textContent = '📚 导出绘本 PDF';
             } catch (err) {
                 resultDiv.innerHTML = `<p class="error">错误: ${err.message}</p>`;
                 btn.disabled = false;

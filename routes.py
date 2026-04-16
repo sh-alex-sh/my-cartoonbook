@@ -5,12 +5,20 @@ from flask import Blueprint, request, jsonify, current_app, send_file
 from werkzeug.utils import secure_filename
 import os
 import uuid
+import urllib.parse
 
 api = Blueprint('api', __name__)
+
+task_files = {}
 
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ['pdf', 'docx', 'txt']
+
+
+def get_safe_folder_name(original_name, task_id):
+    safe_name = original_name.replace('/', '_').replace('\\', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
+    return f"{safe_name}_{task_id[:8]}"
 
 
 @api.route('/upload', methods=['POST'])
@@ -27,7 +35,16 @@ def upload_file():
     filename = f"{task_id}{ext}"
     filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
     file.save(filepath)
-    return jsonify({'task_id': task_id, 'filepath': filepath})
+
+    safe_filename = os.path.splitext(secure_filename(file.filename))[0]
+    if not safe_filename:
+        safe_filename = "story"
+    task_files[task_id] = {
+        'filepath': filepath,
+        'original_name': safe_filename
+    }
+
+    return jsonify({'task_id': task_id, 'filepath': filepath, 'original_name': safe_filename})
 
 
 @api.route('/parse', methods=['POST'])
@@ -66,13 +83,34 @@ def generate_outline():
 def generate_images():
     from services.image_generator import ImageGenerator
     data = request.json
-    result = ImageGenerator().generate_all(data.get('outline'))
-    return jsonify(result)
+    task_id = data.get('task_id')
+    original_name = data.get('original_name', 'story')
+
+    print(f"[DEBUG] /api/images called - task_id: {task_id}, original_name: {original_name}")
+    print(f"[DEBUG] task_files keys: {list(task_files.keys())}")
+    print(f"[DEBUG] task_files[{task_id}]: {task_files.get(task_id)}")
+
+    task_info = task_files.get(task_id, {})
+    original_name = task_info.get('original_name', original_name)
+
+    print(f"[DEBUG] Using original_name: {original_name}")
+
+    try:
+        result = ImageGenerator().generate_all(data.get('outline'), task_id, original_name)
+        return jsonify(result)
+    except Exception as e:
+        import traceback
+        print(f"[DEBUG] /api/images error: {e}")
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
-@api.route('/image/<path:filename>', methods=['GET'])
-def get_image(filename):
-    filepath = os.path.join('outputs', 'images', filename)
+@api.route('/image/<path:folder>/<path:filename>', methods=['GET'])
+def get_image(folder, filename):
+    folder_decoded = urllib.parse.unquote(folder)
+    filename_decoded = urllib.parse.unquote(filename)
+    filepath = os.path.join('outputs', folder_decoded, 'images', filename_decoded)
+    print(f"[DEBUG] 查找图片: {filepath}")
     if os.path.exists(filepath):
         return send_file(filepath, mimetype='image/png')
     return jsonify({'error': '图片不存在'}), 404
@@ -82,13 +120,27 @@ def get_image(filename):
 def export_pdf():
     from services.pdf_exporter import PDFExporter
     data = request.json
-    path = PDFExporter().export(data.get('outline'), data.get('images'), data.get('task_id'))
-    return jsonify({'output_path': path, 'download_url': f'/api/download/{data.get("task_id")}'})
+    task_id = data.get('task_id')
+    original_name = data.get('original_name', 'story')
+
+    task_info = task_files.get(task_id, {})
+    original_name = task_info.get('original_name', original_name)
+
+    print(f"[DEBUG] 导出 PDF - task_id: {task_id}, original_name: {original_name}")
+
+    path = PDFExporter().export(data.get('outline'), data.get('images'), task_id, original_name)
+    folder_name = os.path.basename(os.path.dirname(path))
+    download_url = f'/api/download/{urllib.parse.quote(folder_name)}/{urllib.parse.quote(original_name)}.pdf'
+    print(f"[DEBUG] PDF 路径: {path}, 下载URL: {download_url}")
+    return jsonify({'output_path': path, 'download_url': download_url})
 
 
-@api.route('/download/<task_id>', methods=['GET'])
-def download_pdf(task_id):
-    filepath = os.path.join(current_app.config['OUTPUT_FOLDER'], f"storybook_{task_id}.pdf")
+@api.route('/download/<path:folder>/<path:filename>', methods=['GET'])
+def download_pdf(folder, filename):
+    folder_decoded = urllib.parse.unquote(folder)
+    filename_decoded = urllib.parse.unquote(filename)
+    filepath = os.path.join('outputs', folder_decoded, filename_decoded)
+    print(f"[DEBUG] 下载 PDF: {filepath}")
     if os.path.exists(filepath):
-        return send_file(filepath, as_attachment=True)
+        return send_file(filepath, as_attachment=True, download_name=filename_decoded)
     return jsonify({'error': '文件不存在'}), 404
