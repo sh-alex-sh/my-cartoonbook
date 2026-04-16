@@ -20,6 +20,9 @@ print(f"[DEBUG] LIBLIB_SECRET_KEY: {LIBLIB_SECRET_KEY[:4] if LIBLIB_SECRET_KEY e
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 DEEPSEEK_API_BASE = "https://api.deepseek.com"
 
+# 服务地址配置（用于生成参考图URL）
+API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:5000")
+
 # 默认模型配置
 DEFAULT_TEMPLATE_UUID = "5d7e67009b344550bc1aa6ccbfa1d7f4"
 

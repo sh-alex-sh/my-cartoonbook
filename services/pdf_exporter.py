@@ -80,22 +80,19 @@ class PDFExporter:
                 img_path = os.path.join(images_folder, img_filename)
                 print(f"[DEBUG] 查找 PDF 图片 page_{page_num}: {img_path}")
                 if os.path.exists(img_path):
-                    img_width = width * 0.85
-                    img_height = height * 0.5
-                    x = (width - img_width) / 2
-                    y = height * 0.42
+                    img_draw_height = height * 0.65
                     try:
-                        c.drawImage(img_path, x, y, width=img_width, height=img_height, preserveAspectRatio=True)
+                        c.drawImage(img_path, 0, height - img_draw_height, width=width, height=img_draw_height, preserveAspectRatio=False)
                     except Exception as e:
                         print(f"[DEBUG] 绘制图片失败: {e}")
 
             if content:
-                c.setFont('SimSun', 14)
-                text_y = height * 0.35
+                c.setFont('SimHei', 16)
+                text_y = height * 0.28
                 lines = self._wrap_text(content, width - 4*cm, c)
                 for line in lines[:3]:
-                    c.drawString(2*cm, text_y, line)
-                    text_y -= 20
+                    c.drawCentredString(width / 2, text_y, line)
+                    text_y -= 24
 
             c.showPage()
 
@@ -110,14 +107,14 @@ class PDFExporter:
             print(f"[DEBUG] 绘制封底图片: {img_path}")
             if os.path.exists(img_path):
                 try:
-                    img_draw_height = height * 0.7
+                    img_draw_height = height * 0.65
                     c.drawImage(img_path, 0, height - img_draw_height, width=width, height=img_draw_height, preserveAspectRatio=False)
                 except Exception as e:
                     print(f"[DEBUG] 绘制封底图片失败: {e}")
 
         if final_line:
-            c.setFont('SimSun', 16)
-            c.drawCentredString(width / 2, height * 0.15, final_line)
+            c.setFont('SimHei', 16)
+            c.drawCentredString(width / 2, height * 0.28, final_line)
 
         c.showPage()
         c.save()
