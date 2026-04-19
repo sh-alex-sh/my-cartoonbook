@@ -9,12 +9,11 @@ print(f"[DEBUG] 加载环境变量文件: {env_path}")
 print(f"[DEBUG] 文件存在: {os.path.exists(env_path)}")
 load_dotenv(env_path, override=True)
 
-# LibLib API 配置
-LIBLIB_API_BASE = "https://openapi.liblibai.cloud"
-LIBLIB_ACCESS_KEY = os.getenv("LIBLIB_ACCESS_KEY", "")
-LIBLIB_SECRET_KEY = os.getenv("LIBLIB_SECRET_KEY", "")
-print(f"[DEBUG] LIBLIB_ACCESS_KEY: {LIBLIB_ACCESS_KEY}")
-print(f"[DEBUG] LIBLIB_SECRET_KEY: {LIBLIB_SECRET_KEY[:4] if LIBLIB_SECRET_KEY else 'None'}...")
+# 图像生成 API 配置
+IMAGE_API_BASE = os.getenv("IMAGE_API_BASE", "https://api.example.com") # 替换为你的 API 地址
+IMAGE_API_KEY = os.getenv("IMAGE_API_KEY", "")
+IMAGE_MODEL_ID = os.getenv("IMAGE_MODEL_ID", "default-model-id") # 如果需要，可以配置模型ID
+
 
 # DeepSeek API 配置
 DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
@@ -23,8 +22,7 @@ DEEPSEEK_API_BASE = "https://api.deepseek.com"
 # 服务地址配置（用于生成参考图URL）
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:5000")
 
-# 默认模型配置
-DEFAULT_TEMPLATE_UUID = "5d7e67009b344550bc1aa6ccbfa1d7f4"
+
 
 # 图片生成参数默认值
 DEFAULT_STEPS = 30

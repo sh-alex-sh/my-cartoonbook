@@ -2,120 +2,100 @@
 图片生成服务
 """
 import requests
-import hmac
-import hashlib
+import os
+import uuid
 import base64
 import time
-import uuid
-import os
-import json
-
+from config import IMAGE_API_BASE, IMAGE_API_KEY, IMAGE_MODEL_ID
 
 class ImageGenerator:
     def __init__(self):
-        from config import LIBLIB_API_BASE, LIBLIB_ACCESS_KEY, LIBLIB_SECRET_KEY
-        self.api_base = LIBLIB_API_BASE
-        self.access_key = LIBLIB_ACCESS_KEY
-        self.secret_key = LIBLIB_SECRET_KEY
+        self.api_base = IMAGE_API_BASE
+        self.api_key = IMAGE_API_KEY
+        self.model_id = IMAGE_MODEL_ID
 
     def _get_output_dir(self, task_id, original_name):
-        safe_name = original_name.replace('/', '_').replace('\\', '_').replace(':', '_').replace('*', '_').replace('?', '_').replace('"', '_').replace('<', '_').replace('>', '_').replace('|', '_')
+        safe_name = ''.join(c for c in original_name if c.isalnum() or c in (' ', '_')).rstrip()
         folder_name = f"{safe_name}_{task_id[:8]}"
         output_dir = os.path.join("outputs", folder_name, "images")
         os.makedirs(output_dir, exist_ok=True)
         return output_dir, folder_name
 
-    def make_signature(self, uri, timestamp, signature_nonce):
-        content = f"{uri}&{timestamp}&{signature_nonce}"
-        digest = hmac.new(self.secret_key.encode(), content.encode(), hashlib.sha1).digest()
-        return base64.urlsafe_b64encode(digest).rstrip(b'=').decode()
-
-    def make_auth_params(self, uri):
-        timestamp = str(int(time.time() * 1000))
-        signature_nonce = str(uuid.uuid4())
-        signature = self.make_signature(uri, timestamp, signature_nonce)
-        print(f"[DEBUG] 签名参数 - URI: {uri}, Timestamp: {timestamp}, SignatureNonce: {signature_nonce}, Signature: {signature}")
+    def _get_headers(self):
+        """构造请求头，包含认证信息"""
         return {
-            "AccessKey": self.access_key,
-            "Signature": signature,
-            "Timestamp": timestamp,
-            "SignatureNonce": signature_nonce
+            "Content-Type": "application/json"
         }
 
     def generate_one(self, scene_description, output_dir, folder_name, ref_image_path=None):
-        uri = "/api/generate/webui/text2img/ultra"
-        auth_params = self.make_auth_params(uri)
-        full_url = f"{self.api_base}{uri}"
+        """
+        生成单张图片。
+        注意：这是一个示例实现，你需要根据你的新API文档来调整 payload 结构。
+        """
+        # 假设新API的端点是 /v1/images/generations
+        endpoint = f"/v1beta/models/{self.model_id}:generateContent" 
+        full_url = f"{self.api_base}{endpoint}?key={self.api_key}"
+        
         print(f"[DEBUG] 完整请求URL: {full_url}")
-        print(f"[DEBUG] 请求参数: {auth_params}")
 
-        generate_params = {
-            "prompt": scene_description,
-            "promptMagic": 1,
-            "aspectRatio": "square",
-            "imgCount": 1
+        # 这是一个通用的 payload 结构，请根据你的新API文档进行修改
+        payload = {
+            "contents": [{
+                "parts": [{
+                    "text": scene_description
+                }]
+            }]
         }
 
         if ref_image_path and os.path.exists(ref_image_path):
-            from config import API_BASE_URL
-            ref_url = f"{API_BASE_URL}/api/image/{folder_name}/{os.path.basename(ref_image_path)}"
-            generate_params["inputImage"] = ref_url
-            generate_params["imageType"] = 1
-            print(f"[DEBUG] 使用参考图: {ref_url}")
-
-        payload = {
-            "templateUuid": "5d7e67009b344550bc1aa6ccbfa1d7f4",
-            "generateParams": generate_params
-        }
+            # 这里需要根据新API的文档来处理参考图
+            # 可能是上传图片获取URL，也可能是直接发送base64
+            print(f"[DEBUG] 使用参考图: {ref_image_path} (注意: 当前未实现参考图逻辑)")
+            # payload['image_url'] = ref_image_path # 示例
 
         print(f"[DEBUG] 开始生成图片，prompt: {scene_description[:80]}...")
-        response = requests.post(full_url, headers={"Content-Type": "application/json"}, params=auth_params, json=payload, timeout=30)
-        print(f"[DEBUG] 生成请求响应: {response.status_code} - {response.text[:200]}")
-        result = response.json()
-        generate_uuid = result.get("data", {}).get("generateUuid")
-        if not generate_uuid:
-            error_msg = result.get("msg", result.get("message", str(result)))
-            print(f"[DEBUG] 生成失败: {error_msg}")
-            raise Exception(f"图片生成请求失败: {error_msg}")
-        return self._wait_for_image(generate_uuid, output_dir, folder_name)
-
-    def _wait_for_image(self, generate_uuid, output_dir, folder_name, max_retries=60):
-        uri = "/api/generate/webui/status"
-        for i in range(max_retries):
-            auth_params = self.make_auth_params(uri)
-            response = requests.post(f"{self.api_base}{uri}", params=auth_params, json={"generateUuid": generate_uuid}, timeout=30)
-            result = response.json()
-            data = result.get("data")
-            if data is None:
-                print(f"[DEBUG] 状态轮询 {i+1}: data为空, 响应: {response.text[:100]}")
-                time.sleep(3)
-                continue
-            status = data.get("generateStatus")
-            print(f"[DEBUG] 状态轮询 {i+1}: status={status}")
-            if status == 6 or (status == 5 and data.get("percentCompleted") == 1.0):
-                images = data.get("images")
-                if images and len(images) > 0:
-                    image_url = images[0].get("imageUrl")
-                    if image_url:
-                        local_path = self._download_image(image_url, generate_uuid, output_dir, folder_name)
-                        return local_path
-            time.sleep(3)
-        raise Exception("生成超时（60秒内未完成）")
-
-    def _download_image(self, image_url, generate_uuid, output_dir, folder_name):
+        
         try:
-            response = requests.get(image_url, timeout=30)
-            if response.status_code == 200:
-                filename = f"{generate_uuid}.png"
-                filepath = os.path.join(output_dir, filename)
-                with open(filepath, 'wb') as f:
-                    f.write(response.content)
-                print(f"[DEBUG] 图片保存到: {filepath}")
-                return f"/api/image/{folder_name}/{filename}"
+            response = requests.post(full_url, headers=self._get_headers(), json=payload, timeout=60)
+            response.raise_for_status() # 如果状态码不是 2xx，则抛出异常
+            
+            result = response.json()
+            print(f"[DEBUG] 生成请求响应: {response.status_code} - {str(result)[:200]}")
+
+            # 解析内联的 base64 数据
+            parts = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])
+            base64_data = None
+            for part in parts:
+                if 'inlineData' in part:
+                    base64_data = part['inlineData'].get('data')
+                    break
+            
+            if not base64_data:
+                print(f"[DEBUG] 完整API响应: {result}")
+                raise Exception("API响应中未找到图片 base64 数据")
+
+            return self._save_base64_image(base64_data, str(uuid.uuid4()), output_dir, folder_name)
+
+        except requests.exceptions.RequestException as e:
+            print(f"[DEBUG] API 请求失败: {e}")
+            if e.response:
+                print(f"[DEBUG] 错误响应: {e.response.text}")
+            raise Exception(f"图片生成请求失败: {e}")
+
+
+    def _save_base64_image(self, base64_data, generate_uuid, output_dir, folder_name):
+        """将 base64 编码的字符串解码并保存为图片文件"""
+        try:
+            image_data = base64.b64decode(base64_data)
+            filename = f"{generate_uuid}.png"
+            filepath = os.path.join(output_dir, filename)
+            with open(filepath, 'wb') as f:
+                f.write(image_data)
+            print(f"[DEBUG] 图片保存到: {filepath}")
+            return f"/api/image/{folder_name}/{filename}"
         except Exception as e:
-            print(f"[DEBUG] 下载图片失败: {e}")
-            pass
-        return image_url
+            print(f"[DEBUG] 保存 base64 图片失败: {e}")
+            raise Exception(f"保存 base64 图片失败: {e}")
 
     def _build_character_prompt(self, character):
         name = character.get('name', '')
@@ -274,4 +254,8 @@ class ImageGenerator:
 - 角色外貌特征：{character_description}
 - 保持相同：脸型、眼睛颜色、发型、服装细节
 - 只可改变：姿势、表情、与场景的互动
-- 画风统一，色彩协调"""
+- 画风统一，色彩协调
+
+【文字渲染强制要求 - 必须严格遵守】
+- 如果图片中需要出现任何文字，必须使用支持中文的、清晰的黑体字。
+- 确保所有中文字符都完整显示，不能出现乱码或方框。"""
