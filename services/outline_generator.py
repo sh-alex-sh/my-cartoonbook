@@ -141,23 +141,48 @@ class OutlineGenerator:
                 timeout=120
             )
             print(f"[DEBUG] Response status: {response.status_code}")
-            print(f"[DEBUG] Response text: {response.text[:500]}")
+            print(f"[DEBUG] Response text length: {len(response.text)}")
+            print(f"[DEBUG] Response text (first 1000 chars): {response.text[:1000]}")
 
             result = response.json()
 
             if "choices" in result and len(result["choices"]) > 0:
                 text = result["choices"][0]["message"]["content"]
                 text = text.strip()
-                if text.startswith("```json"):
-                    text = text[7:]
-                if text.startswith("```"):
-                    text = text[3:]
-                if text.endswith("```"):
-                    text = text[:-3]
-                text = text.strip()
-                print(f"[DEBUG] Parsed text: {text[:200]}")
-                outline = json.loads(text)
-                return outline
+                
+                # 更智能地提取 JSON 内容
+                if "```json" in text:
+                    # 提取 ```json 块中的内容
+                    start_idx = text.find("```json") + 7
+                    end_idx = text.find("```", start_idx)
+                    if end_idx != -1:
+                        text = text[start_idx:end_idx].strip()
+                elif text.startswith("```"):
+                    # 提取普通 ``` 块中的内容
+                    start_idx = text.find("```") + 3
+                    end_idx = text.find("```", start_idx)
+                    if end_idx != -1:
+                        text = text[start_idx:end_idx].strip()
+                
+                print(f"[DEBUG] Parsed text length: {len(text)}")
+                print(f"[DEBUG] Parsed text (first 500 chars): {text[:500]}")
+                
+                # 尝试解析 JSON
+                try:
+                    outline = json.loads(text)
+                    return outline
+                except json.JSONDecodeError as e:
+                    print(f"[DEBUG] JSON 解析失败: {e}")
+                    print(f"[DEBUG] 尝试解析的文本: {text}")
+                    # 如果解析失败，尝试修复常见的 JSON 格式问题
+                    text = self._fix_json_format(text)
+                    try:
+                        outline = json.loads(text)
+                        print("[DEBUG] 修复后的 JSON 解析成功")
+                        return outline
+                    except json.JSONDecodeError as e2:
+                        print(f"[DEBUG] 修复后仍然失败: {e2}")
+                        raise Exception(f"DeepSeek API 返回的 JSON 格式错误: {str(e2)}")
             else:
                 error_msg = result.get("error", {}).get("message", str(result))
                 print(f"[DEBUG] DeepSeek API error: {error_msg}")
@@ -168,6 +193,7 @@ class OutlineGenerator:
             raise Exception("DeepSeek API 请求超时，请重试")
         except json.JSONDecodeError as e:
             print(f"[DEBUG] JSON decode error: {e}")
+            print(f"[DEBUG] Raw response text: {response.text}")
             raise Exception(f"DeepSeek API 返回格式错误: {str(e)}")
         except Exception as e:
             print(f"[DEBUG] Error calling DeepSeek API: {e}")
