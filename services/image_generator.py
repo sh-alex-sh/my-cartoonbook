@@ -1,12 +1,14 @@
 """
 图片生成服务
 """
+import datetime
 import requests
 import os
 import uuid
 import base64
 import time
 from config import IMAGE_API_BASE, IMAGE_API_KEY, IMAGE_MODEL_ID
+from services.image_processor import image_processor
 
 class ImageGenerator:
     def __init__(self):
@@ -15,37 +17,77 @@ class ImageGenerator:
         self.model_id = IMAGE_MODEL_ID
 
     def _get_output_dir(self, task_id, original_name):
-        safe_name = ''.join(c for c in original_name if c.isalnum() or c in (' ', '_')).rstrip()
-        folder_name = f"{safe_name}_{task_id[:8]}"
-        output_dir = os.path.join("outputs", folder_name, "images")
+        """
+        生成统一的输出文件夹名称
+        格式：年月日时 + 顺序编号，例如：20260419131、20260419132
+        """
+        # 获取当前时间
+        now = datetime.datetime.now()
+        time_prefix = now.strftime("%Y%m%d%H")  # 格式：2026041913
+        
+        # 检查 outputs 目录下已有的文件夹
+        base_output_dir = "outputs"
+        os.makedirs(base_output_dir, exist_ok=True)
+        
+        # 获取所有以时间前缀开头的文件夹
+        existing_folders = []
+        if os.path.exists(base_output_dir):
+            for item in os.listdir(base_output_dir):
+                if os.path.isdir(os.path.join(base_output_dir, item)) and item.startswith(time_prefix):
+                    existing_folders.append(item)
+        
+        # 确定下一个序号
+        if existing_folders:
+            # 找到最大的序号
+            max_num = 0
+            for folder in existing_folders:
+                if len(folder) > len(time_prefix):
+                    try:
+                        num = int(folder[len(time_prefix):])
+                        max_num = max(max_num, num)
+                    except ValueError:
+                        pass
+            folder_name = f"{time_prefix}{max_num + 1}"
+        else:
+            folder_name = f"{time_prefix}1"
+        
+        # 创建完整的输出目录结构
+        output_dir = os.path.join(base_output_dir, folder_name, "images")
         os.makedirs(output_dir, exist_ok=True)
+        
+        print(f"[DEBUG] 输出文件夹: {folder_name}")
         return output_dir, folder_name
 
     def _get_headers(self):
         """构造请求头，包含认证信息"""
         return {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.api_key}",
+            "Accept": "*/*",
+            "Host": "www.packyapi.com",
+            "Connection": "keep-alive"
         }
 
     def generate_one(self, scene_description, output_dir, folder_name, ref_image_path=None):
         """
         生成单张图片。
-        注意：这是一个示例实现，你需要根据你的新API文档来调整 payload 结构。
         """
-        # 假设新API的端点是 /v1/images/generations
-        endpoint = f"/v1beta/models/{self.model_id}:generateContent" 
-        full_url = f"{self.api_base}{endpoint}?key={self.api_key}"
+        # gpt-image-2 端点
+        endpoint = "/v1/images/generations"
+        full_url = f"{self.api_base}{endpoint}"
+
+        # 根据 API 格式，payload 结构
+        payload = {
+            "model": "gpt-image-2",
+            "prompt": scene_description,
+            "size": "1024x1024",
+            "quality": "high",
+            "output_format": "png",
+            "response_format": "b64_json",
+            "n": 1
+        }
         
         print(f"[DEBUG] 完整请求URL: {full_url}")
-
-        # 这是一个通用的 payload 结构，请根据你的新API文档进行修改
-        payload = {
-            "contents": [{
-                "parts": [{
-                    "text": scene_description
-                }]
-            }]
-        }
 
         if ref_image_path and os.path.exists(ref_image_path):
             # 这里需要根据新API的文档来处理参考图
@@ -60,21 +102,21 @@ class ImageGenerator:
             response.raise_for_status() # 如果状态码不是 2xx，则抛出异常
             
             result = response.json()
-            print(f"[DEBUG] 生成请求响应: {response.status_code} - {str(result)[:200]}")
+            print(f"[DEBUG] 生成请求响应: {response.status_code} - {str(result)[:500]}")
 
-            # 解析内联的 base64 数据
-            parts = result.get('candidates', [{}])[0].get('content', {}).get('parts', [{}])
+            # 解析 b64_json 格式的数据
             base64_data = None
-            for part in parts:
-                if 'inlineData' in part:
-                    base64_data = part['inlineData'].get('data')
-                    break
+            if 'data' in result and len(result['data']) > 0:
+                first_data = result['data'][0]
+                if 'b64_json' in first_data:
+                    base64_data = first_data['b64_json']
+                    print("[DEBUG] 找到 b64_json 数据")
             
-            if not base64_data:
-                print(f"[DEBUG] 完整API响应: {result}")
-                raise Exception("API响应中未找到图片 base64 数据")
-
-            return self._save_base64_image(base64_data, str(uuid.uuid4()), output_dir, folder_name)
+            if base64_data:
+                return self._save_base64_image(base64_data, str(uuid.uuid4()), output_dir, folder_name)
+            
+            print(f"[DEBUG] 完整API响应: {result}")
+            raise Exception("API响应中未找到图片数据")
 
         except requests.exceptions.RequestException as e:
             print(f"[DEBUG] API 请求失败: {e}")
@@ -96,6 +138,32 @@ class ImageGenerator:
         except Exception as e:
             print(f"[DEBUG] 保存 base64 图片失败: {e}")
             raise Exception(f"保存 base64 图片失败: {e}")
+
+    def _download_and_save_image(self, image_url, generate_uuid, output_dir, folder_name):
+        """从 URL 下载图片并保存"""
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            response = requests.get(image_url, headers=headers, timeout=60)
+            response.raise_for_status()
+            
+            content_type = response.headers.get('Content-Type', '')
+            ext = 'png'
+            if 'jpeg' in content_type or 'jpg' in content_type:
+                ext = 'jpg'
+            elif 'webp' in content_type:
+                ext = 'webp'
+            
+            filename = f"{generate_uuid}.{ext}"
+            filepath = os.path.join(output_dir, filename)
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
+            print(f"[DEBUG] 图片下载并保存到: {filepath}")
+            return f"/api/image/{folder_name}/{filename}"
+        except Exception as e:
+            print(f"[DEBUG] 下载图片失败: {e}")
+            raise Exception(f"下载图片失败: {e}")
 
     def _build_character_prompt(self, character):
         name = character.get('name', '')
@@ -137,7 +205,11 @@ class ImageGenerator:
 - 服装细节和颜色
 - 配饰（如有）
 
-儿童绘本风格，所有姿势和表情保持角色一致性，背景简单留白，特征清晰可见"""
+儿童绘本风格，所有姿势和表情保持角色一致性，背景简单留白，特征清晰可见
+
+【重要要求】
+- 图片中不要添加任何文字
+- 不要出现文字标签或标注"""
         return ref_prompt
 
     def generate_all(self, outline, task_id, original_name):
@@ -231,7 +303,13 @@ class ImageGenerator:
                 })
 
         print(f"[DEBUG] === 图片生成完成 ===")
-        return {"images": images, "folder_name": folder_name}
+        
+        # 图片后处理：添加文字
+        print(f"[DEBUG] === 开始图片后处理 ===")
+        processed_images = image_processor.process_all_images(images, output_dir)
+        print(f"[DEBUG] === 图片后处理完成 ===")
+        
+        return {"images": processed_images, "folder_name": folder_name}
 
     def _build_character_description(self, character):
         parts = []
@@ -256,6 +334,6 @@ class ImageGenerator:
 - 只可改变：姿势、表情、与场景的互动
 - 画风统一，色彩协调
 
-【文字渲染强制要求 - 必须严格遵守】
-- 如果图片中需要出现任何文字，必须使用支持中文的、清晰的黑体字。
-- 确保所有中文字符都完整显示，不能出现乱码或方框。"""
+【重要要求】
+- 图片中不要添加任何文字
+- 不要出现文字标签或标注"""
