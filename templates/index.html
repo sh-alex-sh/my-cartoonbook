@@ -208,12 +208,14 @@
             <textarea id="storyContent" placeholder="输入故事内容，或上传文件自动解析..."></textarea>
             <div class="controls">
                 <label>生成页数：</label>
-                <select id="numPages">
-                    <option value="5">5页</option>
-                    <option value="8" selected>8页</option>
-                    <option value="10">10页</option>
-                    <option value="12">12页</option>
-                </select>
+                <input type="number" id="numPages" value="8" min="1" max="20" style="
+                    padding: 10px 16px;
+                    border: 2px solid #e8e8e8;
+                    border-radius: 8px;
+                    font-size: 14px;
+                    width: 80px;
+                    background: white;
+                ">
                 <button class="primary" onclick="generateOutline()">✨ 生成绘本大纲</button>
             </div>
             <div id="outlineResult" class="result"></div>
